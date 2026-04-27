@@ -1,0 +1,30 @@
+services:
+  nova-app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    image: nova-app:latest
+    container_name: nova-app
+    restart: always   # Garante que o serviço volte caso a máquina seja reiniciada
+    network_mode: host   # Necessário para acessar o SQL Server externo
+    env_file:
+      - .env
+    environment:
+      - TZ=America/Sao_Paulo
+    volumes:
+      - ./output:/app/output
+      - ./imports:/app/imports
+      - ./logs:/app/logs
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      # O pacote procps (pgrep) agora está instalado no Dockerfile
+      test: ["CMD", "pgrep", "-f", "main.py"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
