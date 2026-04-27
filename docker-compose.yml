@@ -3,8 +3,8 @@ services:
     build: 
       context: .
       dockerfile: Dockerfile
-    image: nova-app:latest
-    container_name: nova-app
+    image: nova-app-ba:latest
+    container_name: nova-ba
     restart: always   # Garante que o serviço volte caso a máquina seja reiniciada
     network_mode: host   # Necessário para acessar o SQL Server externo
     env_file:
