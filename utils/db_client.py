@@ -189,7 +189,7 @@ def filtrar_vendas_periodo_atual(caminho_venda_bruto: str) -> str:
 
         # Filtrar por CNPJ específico (Coluna 4, Índice 3)
         INDICE_CNPJ = 3
-        cnpjs_permitidos = ['63400543000388', '28934740000114']
+        cnpjs_permitidos = ['63400543000469']
         
         # Garantir que a coluna de CNPJ não tenha espaços invisíveis ou nulos
         df_filtrado[INDICE_CNPJ] = df_filtrado[INDICE_CNPJ].astype(str).str.strip()

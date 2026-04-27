@@ -1,0 +1,66 @@
+# =============================================================
+# .gitignore — NOVA_BA_Multifoco_Automation
+# =============================================================
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# --- Ambientes virtuais ---
+.venv/
+venv/
+env/
+ENV/
+
+# --- Dados sensíveis / credenciais ---
+config/*.env
+config/*.json
+*.env
+.env.*
+!.env.example
+
+# --- Arquivos de entrada (imports) ---
+imports/*.csv
+imports/*.xlsx
+imports/*.xls
+
+# --- Arquivos de saída gerados ---
+output/*.xlsx
+output/*.xls
+output/*.csv
+
+# --- Logs ---
+logs/*.log
+logs/*.txt
+
+# --- Banco de dados local ---
+*.db
+*.sqlite3
+
+# --- Pytest / coverage ---
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# --- IDEs ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- Sistema operacional ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Docker ---
+# (manter Dockerfile e docker-compose.yml versionados)
