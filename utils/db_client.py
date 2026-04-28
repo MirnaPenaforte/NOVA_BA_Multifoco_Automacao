@@ -190,10 +190,13 @@ def filtrar_vendas_periodo_atual(caminho_venda_bruto: str) -> str:
         # Filtrar por CNPJ específico (Coluna 4, Índice 3)
         INDICE_CNPJ = 3
         cnpjs_permitidos = ['63400543000469']
-        
+
+        print(f"🔎 [VENDAS] Filtrando por CNPJ(s): {cnpjs_permitidos}")
         # Garantir que a coluna de CNPJ não tenha espaços invisíveis.
         df_filtrado[INDICE_CNPJ] = df_filtrado[INDICE_CNPJ].astype(str).str.strip()
+        antes_cnpj = len(df_filtrado)
         df_filtrado = df_filtrado[df_filtrado[INDICE_CNPJ].isin(cnpjs_permitidos)]
+        print(f"   ✔ Registros após filtro CNPJ: {antes_cnpj} → {len(df_filtrado)}")
 
         # Converter a data para o formato dd/mm/YYYY (esperado pelos processamentos)
         df_filtrado[INDICE_DATA] = df_filtrado['_data_parsed'].dt.strftime('%d/%m/%Y')
@@ -269,13 +272,16 @@ def filtrar_estoque_atual(caminho_estoque_bruto: str) -> str:
         # Filtrar as linhas onde o estoque é > 0
         df_filtrado = df[df[INDICE_ESTOQUE] > 0].copy()
 
-        # # Filtrar por CNPJ específico (Coluna 1, Índice 0)
+        # Filtrar por CNPJ específico (Coluna 1, Índice 0)
         INDICE_CNPJ = 0
-        cnpjs_permitidos = ['63400543000388', '28934740000114']
-        
+        cnpjs_permitidos = ['63400543000469']
+
+        print(f"🔎 [ESTOQUE] Filtrando por CNPJ(s): {cnpjs_permitidos}")
         # Garantir que a coluna de CNPJ não tenha espaços invisíveis ou nulos
         df_filtrado[INDICE_CNPJ] = df_filtrado[INDICE_CNPJ].astype(str).str.strip()
+        antes_cnpj = len(df_filtrado)
         df_filtrado = df_filtrado[df_filtrado[INDICE_CNPJ].isin(cnpjs_permitidos)]
+        print(f"   ✔ Registros após filtro CNPJ: {antes_cnpj} → {len(df_filtrado)}")
 
         # Opcional: Converter de volta para inteiro/string se necessário, 
         # mas como é salvo em CSV o pandas lidará com o numérico corretamente.
