@@ -191,7 +191,7 @@ def filtrar_vendas_periodo_atual(caminho_venda_bruto: str) -> str:
         INDICE_CNPJ = 3
         cnpjs_permitidos = ['63400543000469']
         
-        # Garantir que a coluna de CNPJ não tenha espaços invisíveis ou nulos
+        # Garantir que a coluna de CNPJ não tenha espaços invisíveis.
         df_filtrado[INDICE_CNPJ] = df_filtrado[INDICE_CNPJ].astype(str).str.strip()
         df_filtrado = df_filtrado[df_filtrado[INDICE_CNPJ].isin(cnpjs_permitidos)]
 
