@@ -19,6 +19,9 @@ DB_PASS   = os.getenv("DB_PASS")
 VIEW_VENDAS  = os.getenv("VIEW_VENDAS",  "dbo.VW_MULTFOCO_VENDAS")
 VIEW_ESTOQUE = os.getenv("VIEW_ESTOQUE", "dbo.VW_MULTIFOCO_ESTOQUE")
 
+# --- CNPJ autorizado (única fonte da verdade para toda a pipeline) ---
+CNPJ_PERMITIDO = os.getenv("CNPJ_PERMITIDO", "63400543000469")
+
 # --- Pasta de destino dos arquivos baixados ---
 DIRETORIO_IMPORTS = "imports"
 
@@ -30,6 +33,7 @@ NOME_ARQUIVO_ESTOQUE = "ESTOQUE"
 # A coluna Saida_Valor_Unitario_Item causa erro 8114 (varchar→numeric) dentro
 # da definição criptografada da view. Usando TRY_CONVERT, o SQL Server retorna
 # NULL em vez de abortar a query, e o valor correto aparece para os registros válidos.
+# O filtro WHERE garante que apenas o CNPJ autorizado saia do banco (1ª camada de defesa).
 QUERY_VENDAS = """
     SELECT
         CFOP,
@@ -44,6 +48,7 @@ QUERY_VENDAS = """
         Vendedor_Ativo,
         Cliente_Codigo
     FROM {view}
+    WHERE Saida_Filial_Cnpj = '{cnpj}'
 """
 
 
@@ -187,9 +192,9 @@ def filtrar_vendas_periodo_atual(caminho_venda_bruto: str) -> str:
         mask = df['_data_parsed'] >= primeiro_dia_mes_anterior
         df_filtrado = df[mask].copy()
 
-        # Filtrar por CNPJ específico (Coluna 4, Índice 3)
+        # Filtrar por CNPJ específico (Coluna 4, Índice 3) — 2ª camada de defesa
         INDICE_CNPJ = 3
-        cnpjs_permitidos = ['63400543000469']
+        cnpjs_permitidos = [CNPJ_PERMITIDO]
 
         print(f"🔎 [VENDAS] Filtrando por CNPJ(s): {cnpjs_permitidos}")
         # Garantir que a coluna de CNPJ não tenha espaços invisíveis.
@@ -272,9 +277,9 @@ def filtrar_estoque_atual(caminho_estoque_bruto: str) -> str:
         # Filtrar as linhas onde o estoque é > 0
         df_filtrado = df[df[INDICE_ESTOQUE] > 0].copy()
 
-        # Filtrar por CNPJ específico (Coluna 1, Índice 0)
+        # Filtrar por CNPJ específico (Coluna 1, Índice 0) — 2ª camada de defesa
         INDICE_CNPJ = 0
-        cnpjs_permitidos = ['63400543000469']
+        cnpjs_permitidos = [CNPJ_PERMITIDO]
 
         print(f"🔎 [ESTOQUE] Filtrando por CNPJ(s): {cnpjs_permitidos}")
         # Garantir que a coluna de CNPJ não tenha espaços invisíveis ou nulos
@@ -335,8 +340,8 @@ def buscar_dados_views() -> list[str]:
 
     # Mapeamento: (nome_base, query_a_executar)
     views = [
-        (NOME_ARQUIVO_VENDAS,  QUERY_VENDAS.format(view=VIEW_VENDAS)),
-        (NOME_ARQUIVO_ESTOQUE, f"SELECT * FROM {VIEW_ESTOQUE}"),
+        (NOME_ARQUIVO_VENDAS,  QUERY_VENDAS.format(view=VIEW_VENDAS, cnpj=CNPJ_PERMITIDO)),
+        (NOME_ARQUIVO_ESTOQUE, f"SELECT * FROM {VIEW_ESTOQUE} WHERE Filial_Cnpj = '{CNPJ_PERMITIDO}'"),
     ]
 
     try:
