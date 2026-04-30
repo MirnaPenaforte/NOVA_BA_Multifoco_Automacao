@@ -14,12 +14,13 @@ def extrair_preco_custo(df_estoque):
     """
     INDICE_EAN    = 1
     INDICE_QTD    = 2
+    INDICE_LOTE   = 3
     INDICE_PRECO  = 5
 
     try:
         # 1. Seleção e cópia das colunas necessárias
-        df = df_estoque[[INDICE_EAN, INDICE_QTD, INDICE_PRECO]].copy()
-        df.columns = ['EAN', 'Qtd', 'Preço Custo']
+        df = df_estoque[[INDICE_EAN, INDICE_QTD, INDICE_LOTE, INDICE_PRECO]].copy()
+        df.columns = ['EAN', 'Qtd', 'Lote', 'Preço Custo']
 
         # 2. Limpeza do EAN
         df['EAN'] = df['EAN'].astype(str).str.strip()
@@ -34,6 +35,12 @@ def extrair_preco_custo(df_estoque):
             .str.replace(',', '.', regex=False)
         )
         df['Preço Custo'] = pd.to_numeric(df['Preço Custo'], errors='coerce').fillna(0.0)
+
+        # 4.1. Elimina linhas com estoque zero
+        df = df[df['Qtd'] > 0].copy()
+
+        # 4.2. Deduplica Lotes: mesmo EAN e Lote. Mantém o menor Preço Custo
+        df = df.sort_values('Preço Custo', ascending=True).drop_duplicates(subset=['EAN', 'Lote'], keep='first')
 
         # 5. Calcula a contribuição ponderada de cada lote: preço × qtd_lote
         df['Contribuição'] = df['Preço Custo'] * df['Qtd']
