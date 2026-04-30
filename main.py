@@ -116,27 +116,6 @@ def main():
             # Garantia extra contra zeros inteiros salvos do processo
             df_final.loc[df_final['Preço Custo'] == 0, 'Preço Custo'] = 0.001
 
-            # --- EANs SEM CUSTO: forçar célula em branco no relatório ---
-            # Lê todos os CSVs dentro de imports/EANs_S_CUSTO/ e coleta os EANs listados.
-            # Para esses EANs, o Preço Custo é sobrescrito com None (célula vazia no Excel),
-            # independentemente do valor calculado anteriormente.
-            dir_eans_s_custo = os.path.join('imports', 'EANs_S_CUSTO')
-            eans_sem_custo = set()
-            if os.path.isdir(dir_eans_s_custo):
-                for csv_path in glob.glob(os.path.join(dir_eans_s_custo, '*.csv')):
-                    try:
-                        df_eans = pd.read_csv(csv_path, header=None, dtype=str)
-                        eans_sem_custo.update(
-                            df_eans.iloc[:, 0].astype(str).str.strip().tolist()
-                        )
-                    except Exception as e_ean:
-                        print(f"⚠️ Erro ao ler EANs sem custo de '{csv_path}': {e_ean}")
-
-            if eans_sem_custo:
-                df_final['EAN'] = df_final['EAN'].astype(str).str.strip()
-                mask_sem_custo = df_final['EAN'].isin(eans_sem_custo)
-                df_final.loc[mask_sem_custo, 'Preço Custo'] = None
-                print(f"🔕 {mask_sem_custo.sum()} EAN(s) marcados sem custo (célula em branco).")
 
             # --- EXPORTAÇÃO E GESTÃO DE ARQUIVOS (Output) ---
             # Esta função cria as colunas vazias, salva na pasta /output 
