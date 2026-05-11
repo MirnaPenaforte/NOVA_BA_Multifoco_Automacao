@@ -30,11 +30,17 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Garante a existência das pastas de trabalho base
-RUN mkdir -p imports output logs
+# Cria usuário não-root para evitar arquivos owned by root nos volumes montados
+RUN useradd -m -u 1000 appuser
+
+# Garante a existência das pastas de trabalho e ajusta permissões
+RUN mkdir -p imports output logs && chown -R appuser:appuser /app
 
 # Copia o restante do código da aplicação
-COPY . .
+COPY --chown=appuser:appuser . .
+
+# Roda como usuário não-root
+USER appuser
 
 # Define o comando de inicialização
 CMD ["python3", "main.py"]

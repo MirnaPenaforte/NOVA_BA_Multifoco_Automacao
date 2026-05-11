@@ -1,6 +1,6 @@
+
 import os
 import sys
-import glob
 import pandas as pd
 from core.read_Csv import ler_csv_sem_header
 from core.Col_estoque import processar_estoque_agrupado
@@ -17,59 +17,123 @@ from utils.Disparo import iniciar_agendador
 
 def main():
     diretorio_imports = 'imports'
-    
-    print("\n--- Extração de dados das Views ---")
-    try:
-        # Busca os dados diretamente do banco de dados via views
-        arquivos_baixados = buscar_dados_views()
-        if not arquivos_baixados:
-            print("⚠️ Aviso: Nenhum dado retornado das Views. A rotina será encerrada.")
+    usar_arquivos_ja_filtrados = False  # flag: True quando os _ATUAL_ já estão prontos
+
+    # =========================================================
+    # FLAG: USE_BANCO
+    #   True  → busca dados do banco de dados (comportamento normal)
+    #   False → usa os arquivos CSV já existentes na pasta /imports
+    # =========================================================
+    USE_BANCO = True
+
+    if USE_BANCO:
+        print("\n--- Extração de dados das Views ---")
+        try:
+            arquivos_baixados = buscar_dados_views()
+            if not arquivos_baixados:
+                print("⚠️ Aviso: Nenhum dado retornado das Views. A rotina será encerrada.")
+                return
+        except RuntimeError as e:
+            print(f"❌ Erro crítico na conexão: {e}")
+            print("A rotina será retomada no próximo disparo agendado.")
             return
-    except RuntimeError as e:
-        print(f"❌ Erro crítico na conexão: {e}")
-        print("A rotina será retomada no próximo disparo agendado.")
-        return
-    except Exception as e:
-        print(f"❌ Erro inesperado na extração: {e}")
-        return
+        except Exception as e:
+            print(f"❌ Erro inesperado na extração: {e}")
+            return
+
+        venda_bruta_path = next((f for f in arquivos_baixados if 'VENDA' in os.path.basename(f).upper()), None)
+        estoque_path     = next((f for f in arquivos_baixados if 'ESTOQUE' in os.path.basename(f).upper()), None)
+
+        if not venda_bruta_path or not estoque_path:
+            print("❌ Erro: Arquivos de VENDA ou ESTOQUE não encontrados na extração.")
+            return
+
+    else:
+        # --- MODO OFFLINE: lê os arquivos existentes em /imports ---
+        print("\n⚠️  [MODO OFFLINE] Banco de dados desativado. Usando arquivos da pasta /imports.")
+
+        arquivos_imports = [
+            os.path.join(diretorio_imports, f)
+            for f in os.listdir(diretorio_imports)
+            if f.endswith('.csv')
+        ]
+
+        # Tenta primeiro arquivos brutos (sem _ATUAL_)
+        vendas_brutas = sorted(
+            [f for f in arquivos_imports if 'VENDA' in os.path.basename(f).upper() and 'ATUAL' not in os.path.basename(f).upper()],
+            key=os.path.getmtime, reverse=True,
+        )
+        estoques_brutos = sorted(
+            [f for f in arquivos_imports if 'ESTOQUE' in os.path.basename(f).upper() and 'ATUAL' not in os.path.basename(f).upper()],
+            key=os.path.getmtime, reverse=True,
+        )
+
+        # Fallback: usa arquivos _ATUAL_ quando não há brutos (já filtrados, pula etapa de filtro)
+        vendas_atuais = sorted(
+            [f for f in arquivos_imports if 'VENDA' in os.path.basename(f).upper() and 'ATUAL' in os.path.basename(f).upper()],
+            key=os.path.getmtime, reverse=True,
+        )
+        estoques_atuais = sorted(
+            [f for f in arquivos_imports if 'ESTOQUE' in os.path.basename(f).upper() and 'ATUAL' in os.path.basename(f).upper()],
+            key=os.path.getmtime, reverse=True,
+        )
+
+        usar_arquivos_ja_filtrados = False
+
+        if vendas_brutas and estoques_brutos:
+            venda_bruta_path = vendas_brutas[0]
+            estoque_path     = estoques_brutos[0]
+            print(f"📂 VENDA (bruto)  : {venda_bruta_path}")
+            print(f"📂 ESTOQUE (bruto): {estoque_path}")
+
+        elif vendas_atuais and estoques_atuais:
+            # Já filtrados — usa diretamente sem passar pelo filtro
+            venda_bruta_path     = vendas_atuais[0]
+            estoque_path         = estoques_atuais[0]
+            usar_arquivos_ja_filtrados = True
+            print(f"📂 VENDA (já filtrado)  : {venda_bruta_path}")
+            print(f"📂 ESTOQUE (já filtrado): {estoque_path}")
+
+        else:
+            if not vendas_brutas and not vendas_atuais:
+                print("❌ Nenhum arquivo VENDA encontrado na pasta /imports.")
+            if not estoques_brutos and not estoques_atuais:
+                print("❌ Nenhum arquivo ESTOQUE encontrado na pasta /imports.")
+            return
 
 
-    # 2. Carregamento dos Arquivos Originais baixados do banco
-    print("Carregando arquivos originais baixados do banco...")
-    
-    venda_bruta_path = next((f for f in arquivos_baixados if 'VENDA' in os.path.basename(f).upper()), None)
-    estoque_path = next((f for f in arquivos_baixados if 'ESTOQUE' in os.path.basename(f).upper()), None)
-    
-    if not venda_bruta_path or not estoque_path:
-        print("❌ Erro: Arquivos de VENDA ou ESTOQUE não encontrados na extração.")
-        return
+    # 3. Filtrar vendas e estoque (pula se já são arquivos _ATUAL_)
+    if usar_arquivos_ja_filtrados:
+        venda_path         = venda_bruta_path
+        estoque_atual_path = estoque_path
+        print("ℹ️  Arquivos já filtrados — etapa de filtro ignorada.")
+    else:
+        # Filtrar vendas — manter apenas mês atual e mês anterior
+        venda_path = filtrar_vendas_periodo_atual(venda_bruta_path)
+        if not venda_path:
+            print("❌ Erro: Falha ao filtrar vendas por período.")
+            return
 
-    # 3. Filtrar vendas — manter apenas mês atual e mês anterior
-    #    Gera VENDA_ATUAL_DD-MM-AAAA.csv com datas convertidas para dd/mm/YYYY
-    venda_path = filtrar_vendas_periodo_atual(venda_bruta_path)
-    if not venda_path:
-        print("❌ Erro: Falha ao filtrar vendas por período.")
-        return
-
-    # 4. Filtrar estoque — manter apenas produtos com estoque > 0
-    #    Gera ESTOQUE_ATUAL_DD-MM-AAAA.csv
-    estoque_atual_path = filtrar_estoque_atual(estoque_path)
-    if not estoque_atual_path:
-        print("❌ Erro: Falha ao filtrar estoque atual.")
-        return
+        # Filtrar estoque — manter apenas produtos com estoque > 0
+        estoque_atual_path = filtrar_estoque_atual(estoque_path)
+        if not estoque_atual_path:
+            print("❌ Erro: Falha ao filtrar estoque atual.")
+            return
 
     # --- BACKUP DIÁRIO DE IMPORTAÇÕES (Raw + Atual) ---
     print("Iniciando rotina de backup dos arquivos importados do dia...")
     arquivar_arquivos_importacao(diretorio_imports)
 
-    # Remover os arquivos brutos (manter apenas VENDA_ATUAL e ESTOQUE_ATUAL na pasta raiz)
-    try:
-        os.remove(venda_bruta_path)
-        print(f"🗑️  Arquivo bruto removido: {venda_bruta_path}")
-        os.remove(estoque_path)
-        print(f"🗑️  Arquivo bruto removido: {estoque_path}")
-    except OSError:
-        pass
+    # Remover os arquivos brutos apenas quando veio do banco
+    # (em modo offline, preservamos os arquivos originais da pasta)
+    if USE_BANCO:
+        try:
+            os.remove(venda_bruta_path)
+            print(f"🗑️  Arquivo bruto removido: {venda_bruta_path}")
+            os.remove(estoque_path)
+            print(f"🗑️  Arquivo bruto removido: {estoque_path}")
+        except OSError:
+            pass
 
     df_vendas_bruto = ler_csv_sem_header(venda_path)
     df_estoque_bruto = ler_csv_sem_header(estoque_atual_path)
@@ -98,7 +162,7 @@ def main():
             df_final = preencher_data_entrada(df_final)
 
             # 3. Limpeza de Nulos e Tipagem
-            colunas_numericas = ['Estoque', 'Mês Atual', 'Faturamento Atual']
+            colunas_numericas = ['Estoque', 'Mês Atual', 'Faturamento Atual', 'Faturamento M-1']
             df_final[colunas_numericas] = df_final[colunas_numericas].fillna(0)
         
             # Garantir formato inteiro para colunas de contagem
@@ -115,7 +179,6 @@ def main():
             
             # Garantia extra contra zeros inteiros salvos do processo
             df_final.loc[df_final['Preço Custo'] == 0, 'Preço Custo'] = 0.001
-
 
             # --- EXPORTAÇÃO E GESTÃO DE ARQUIVOS (Output) ---
             # Esta função cria as colunas vazias, salva na pasta /output 

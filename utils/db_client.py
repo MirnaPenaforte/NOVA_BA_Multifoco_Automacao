@@ -16,11 +16,8 @@ DB_USER   = os.getenv("DB_USER")
 DB_PASS   = os.getenv("DB_PASS")
 
 # --- Nomes das Views (via .env) ---
-VIEW_VENDAS  = os.getenv("VIEW_VENDAS",  "dbo.VW_MULTFOCO_VENDAS")
-VIEW_ESTOQUE = os.getenv("VIEW_ESTOQUE", "dbo.VW_MULTIFOCO_ESTOQUE")
-
-# --- CNPJ autorizado (única fonte da verdade para toda a pipeline) ---
-CNPJ_PERMITIDO = os.getenv("CNPJ_PERMITIDO", "63400543000469")
+VIEW_VENDAS  = os.getenv("VIEW_VENDAS")
+VIEW_ESTOQUE = os.getenv("VIEW_ESTOQUE")
 
 # --- Pasta de destino dos arquivos baixados ---
 DIRETORIO_IMPORTS = "imports"
@@ -33,7 +30,6 @@ NOME_ARQUIVO_ESTOQUE = "ESTOQUE"
 # A coluna Saida_Valor_Unitario_Item causa erro 8114 (varchar→numeric) dentro
 # da definição criptografada da view. Usando TRY_CONVERT, o SQL Server retorna
 # NULL em vez de abortar a query, e o valor correto aparece para os registros válidos.
-# O filtro WHERE garante que apenas o CNPJ autorizado saia do banco (1ª camada de defesa).
 QUERY_VENDAS = """
     SELECT
         CFOP,
@@ -42,13 +38,12 @@ QUERY_VENDAS = """
         Saida_Filial_Cnpj,
         Saida_Quantidade,
         TRY_CONVERT(NUMERIC(18,4), Saida_Valor_Unitario_Item) AS Saida_Valor_Unitario_Item,
-        Produto_Ean,
+        CAST(Produto_Ean AS VARCHAR(MAX)) AS Produto_Ean,
         Vendedor_Codigo,
         Vendedor_Nome,
         Vendedor_Ativo,
         Cliente_Codigo
     FROM {view}
-    WHERE Saida_Filial_Cnpj = '{cnpj}'
 """
 
 
@@ -130,6 +125,12 @@ def _salvar_csv(df: pd.DataFrame, nome_base: str) -> str:
     nome_arquivo = f"{nome_base}_{data_str}.csv"
     caminho = os.path.join(DIRETORIO_IMPORTS, nome_arquivo)
 
+    if os.path.exists(caminho):
+        try:
+            os.remove(caminho)
+        except Exception as e:
+            print(f"⚠️ Aviso: Não foi possível remover {caminho} antes de salvar: {e}")
+
     df.to_csv(
         caminho,
         sep=";",
@@ -192,16 +193,13 @@ def filtrar_vendas_periodo_atual(caminho_venda_bruto: str) -> str:
         mask = df['_data_parsed'] >= primeiro_dia_mes_anterior
         df_filtrado = df[mask].copy()
 
-        # Filtrar por CNPJ específico (Coluna 4, Índice 3) — 2ª camada de defesa
+        # Filtrar por CNPJ específico (Coluna 4, Índice 3)
         INDICE_CNPJ = 3
-        cnpjs_permitidos = [CNPJ_PERMITIDO]
-
-        print(f"🔎 [VENDAS] Filtrando por CNPJ(s): {cnpjs_permitidos}")
-        # Garantir que a coluna de CNPJ não tenha espaços invisíveis.
+        cnpjs_permitidos = ['63400543000469']
+        
+        # Garantir que a coluna de CNPJ não tenha espaços invisíveis ou nulos
         df_filtrado[INDICE_CNPJ] = df_filtrado[INDICE_CNPJ].astype(str).str.strip()
-        antes_cnpj = len(df_filtrado)
         df_filtrado = df_filtrado[df_filtrado[INDICE_CNPJ].isin(cnpjs_permitidos)]
-        print(f"   ✔ Registros após filtro CNPJ: {antes_cnpj} → {len(df_filtrado)}")
 
         # Converter a data para o formato dd/mm/YYYY (esperado pelos processamentos)
         df_filtrado[INDICE_DATA] = df_filtrado['_data_parsed'].dt.strftime('%d/%m/%Y')
@@ -230,6 +228,12 @@ def filtrar_vendas_periodo_atual(caminho_venda_bruto: str) -> str:
         data_str = hoje.strftime("%d-%m-%Y")
         nome_arquivo = f"VENDA_ATUAL_{data_str}.csv"
         caminho_saida = os.path.join(DIRETORIO_IMPORTS, nome_arquivo)
+
+        if os.path.exists(caminho_saida):
+            try:
+                os.remove(caminho_saida)
+            except Exception as e:
+                print(f"⚠️ Aviso: Não foi possível remover {caminho_saida} antes de salvar: {e}")
 
         df_filtrado.to_csv(
             caminho_saida,
@@ -277,16 +281,13 @@ def filtrar_estoque_atual(caminho_estoque_bruto: str) -> str:
         # Filtrar as linhas onde o estoque é > 0
         df_filtrado = df[df[INDICE_ESTOQUE] > 0].copy()
 
-        # Filtrar por CNPJ específico (Coluna 1, Índice 0) — 2ª camada de defesa
+        # # Filtrar por CNPJ específico (Coluna 1, Índice 0)
         INDICE_CNPJ = 0
-        cnpjs_permitidos = [CNPJ_PERMITIDO]
-
-        print(f"🔎 [ESTOQUE] Filtrando por CNPJ(s): {cnpjs_permitidos}")
+        cnpjs_permitidos = ['63400543000388', '28934740000114']
+        
         # Garantir que a coluna de CNPJ não tenha espaços invisíveis ou nulos
         df_filtrado[INDICE_CNPJ] = df_filtrado[INDICE_CNPJ].astype(str).str.strip()
-        antes_cnpj = len(df_filtrado)
         df_filtrado = df_filtrado[df_filtrado[INDICE_CNPJ].isin(cnpjs_permitidos)]
-        print(f"   ✔ Registros após filtro CNPJ: {antes_cnpj} → {len(df_filtrado)}")
 
         # Opcional: Converter de volta para inteiro/string se necessário, 
         # mas como é salvo em CSV o pandas lidará com o numérico corretamente.
@@ -298,6 +299,12 @@ def filtrar_estoque_atual(caminho_estoque_bruto: str) -> str:
         data_str = hoje.strftime("%d-%m-%Y")
         nome_arquivo = f"ESTOQUE_ATUAL_{data_str}.csv"
         caminho_saida = os.path.join(DIRETORIO_IMPORTS, nome_arquivo)
+
+        if os.path.exists(caminho_saida):
+            try:
+                os.remove(caminho_saida)
+            except Exception as e:
+                print(f"⚠️ Aviso: Não foi possível remover {caminho_saida} antes de salvar: {e}")
 
         df_filtrado.to_csv(
             caminho_saida,
@@ -340,8 +347,8 @@ def buscar_dados_views() -> list[str]:
 
     # Mapeamento: (nome_base, query_a_executar)
     views = [
-        (NOME_ARQUIVO_VENDAS,  QUERY_VENDAS.format(view=VIEW_VENDAS, cnpj=CNPJ_PERMITIDO)),
-        (NOME_ARQUIVO_ESTOQUE, f"SELECT * FROM {VIEW_ESTOQUE} WHERE Filial_Cnpj = '{CNPJ_PERMITIDO}'"),
+        (NOME_ARQUIVO_VENDAS,  QUERY_VENDAS.format(view=VIEW_VENDAS)),
+        (NOME_ARQUIVO_ESTOQUE, f"SELECT * FROM {VIEW_ESTOQUE}"),
     ]
 
     try:
@@ -353,6 +360,14 @@ def buscar_dados_views() -> list[str]:
                 if df.empty:
                     print(f"⚠️  Query retornou 0 registros — arquivo não será gerado.")
                     continue
+
+                # --- LIMPEZA DE EAN (Garante que códigos de 14 dígitos não virem floats) ---
+                # Vendas: EAN está no índice 6. Estoque: EAN está no índice 1.
+                idx_ean = 6 if nome_base == NOME_ARQUIVO_VENDAS else 1
+                if len(df.columns) > idx_ean:
+                    col_ean = df.columns[idx_ean]
+                    # Converte para string e remove o ".0" que o pandas/sql pode inserir em números grandes
+                    df[col_ean] = df[col_ean].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
 
                 print(f"   ✔ {len(df)} registros encontrados.")
                 caminho = _salvar_csv(df, nome_base)
